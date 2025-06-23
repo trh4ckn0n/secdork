@@ -1,26 +1,45 @@
-import httpx
+import os
+from serpapi import GoogleSearch
 import asyncio
 
-async def fetch_url(client, url):
+def scan_dork_google(dork: str, api_key: str):
     try:
-        r = await client.get(url, timeout=5)
-        return r.status_code, len(r.text)
-    except Exception:
-        return None, None
+        search = GoogleSearch({
+            "q": dork,
+            "api_key": api_key,
+            "num": 10,  # max 100 résultats
+            "hl": "fr"
+        })
+        results = search.get_dict()
+        links = []
+        for r in results.get("organic_results", []):
+            link = r.get("link")
+            if link:
+                links.append(link)
+        return {
+            "dork": dork,
+            "status": 200 if links else "no_results",
+            "results": links,
+            "risk": "High" if any(x in dork.lower() for x in ["admin", "login", "root"]) else "Medium",
+            "source": "serpapi",
+            "country": "FR"
+        }
+    except Exception as e:
+        return {
+            "dork": dork,
+            "status": "error",
+            "error": str(e)
+        }
 
 async def scan_dork(dorks):
-    results = []
-    async with httpx.AsyncClient() as client:
-        for dork in dorks:
-            url = f"https://google.com/search?q={dork.replace(' ', '+')}"
-            status, length = await fetch_url(client, url)
-            result = {
-                "dork": dork,
-                "url": url,
-                "status": status or "timeout",
-                "content_length": length or 0,
-                "risk": "High" if "admin" in dork else "Medium",
-                "country": "FR"
-            }
-            results.append(result)
+    api_key = os.getenv("SERPAPI_KEY")
+    if not api_key:
+        raise ValueError("La variable d'environnement SERPAPI_KEY est manquante.")
+    
+    loop = asyncio.get_event_loop()
+    tasks = []
+    for dork in dorks:
+        task = loop.run_in_executor(None, scan_dork_google, dork, api_key)
+        tasks.append(task)
+    results = await asyncio.gather(*tasks)
     return results
