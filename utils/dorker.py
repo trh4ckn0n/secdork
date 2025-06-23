@@ -1,55 +1,74 @@
+import os
 import httpx
-from bs4 import BeautifulSoup
 import asyncio
-import re
-from urllib.parse import quote_plus
-from colorama import Fore, Style, init
+from urllib.parse import urlparse
 
-init(autoreset=True)
+SERPAPI_KEY = os.getenv("SERPAPI_KEY")
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36"
+# Liste de mots-clés pour évaluer le risque potentiel d'une URL trouvée
+RISK_KEYWORDS = {
+    "high": ["phpmyadmin", ".env", "admin", "config", "passwd", "wp-login"],
+    "medium": ["login", "signin", "dashboard", "panel"],
 }
 
-SEARCH_ENGINES = {
-    "duckduckgo": "https://html.duckduckgo.com/html/?q={query}",
-    # "bing": "https://www.bing.com/search?q={query}",  # Optionnel
-    # "google": "https://www.google.com/search?q={query}"  # risqué (captcha)
-}
 
-def clean_results(html):
-    """Nettoie le HTML et extrait les liens valides"""
-    soup = BeautifulSoup(html, "html.parser")
-    links = []
-    for a in soup.find_all("a", href=True):
-        href = a["href"]
-        if re.match(r"^https?://", href) and "duckduckgo.com" not in href:
-            links.append(href)
-    return links
+def detect_risk(url: str) -> str:
+    url = url.lower()
+    for keyword in RISK_KEYWORDS["high"]:
+        if keyword in url:
+            return "élevé"
+    for keyword in RISK_KEYWORDS["medium"]:
+        if keyword in url:
+            return "modéré"
+    return "faible"
 
-async def search_dork(session, dork, engine="duckduckgo"):
-    url = SEARCH_ENGINES[engine].format(query=quote_plus(dork))
+
+def clean_url(url: str) -> str:
     try:
-        r = await session.post(url, headers=HEADERS, timeout=10)
-        if r.status_code == 200:
-            return clean_results(r.text)
-        else:
-            print(f"{Fore.YELLOW}⚠️ Erreur HTTP {r.status_code} pour le dork: {dork}")
-    except Exception as e:
-        print(f"{Fore.RED}❌ Erreur {e} pour {dork}")
-    return []
+        parsed = urlparse(url)
+        return f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+    except Exception:
+        return url.strip()
 
-async def dorker(dork_list, engine="duckduckgo"):
-    found = {}
-    async with httpx.AsyncClient(follow_redirects=True) as session:
-        tasks = [search_dork(session, dork, engine=engine) for dork in dork_list]
-        results = await asyncio.gather(*tasks)
-        for dork, links in zip(dork_list, results):
-            found[dork] = links or []
-            print(f"\n{Fore.CYAN}[DORK] {dork}{Style.RESET_ALL}")
-            if links:
-                for link in links:
-                    print(f"  {Fore.GREEN}- {link}")
-            else:
-                print(f"  {Fore.RED}- Aucun résultat")
-    return found
+
+async def search_google(dork: str) -> list:
+    if not SERPAPI_KEY:
+        raise ValueError("Clé SERPAPI manquante dans les variables d’environnement.")
+
+    url = "https://serpapi.com/search"
+    params = {
+        "q": dork,
+        "engine": "google",
+        "api_key": SERPAPI_KEY,
+        "num": 10,  # Nombre de résultats par dork
+    }
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            results = data.get("organic_results", [])
+            links = [clean_url(r.get("link", "")) for r in results if r.get("link")]
+            return list(set(links))  # Uniques
+        except Exception as e:
+            print(f"❌ Erreur SERPAPI: {e}")
+            return []
+
+
+async def scan_single_dork(dork: str) -> dict:
+    links = await search_google(dork)
+    risk_level = "aucun"
+    if links:
+        combined = " ".join(links).lower()
+        risk_level = detect_risk(combined)
+    return {
+        "dork": dork,
+        "results": links,
+        "risk": risk_level,
+    }
+
+
+async def scan_dork(dorks: list[str]) -> list[dict]:
+    tasks = [scan_single_dork(d) for d in dorks]
+    return await asyncio.gather(*tasks)
