@@ -23,13 +23,20 @@ async def websocket_scan(websocket: WebSocket):
         data = await websocket.receive_text()
         obj = json.loads(data)
         dorks = obj.get("dorks", [])
-        results = []
-        for result in await scan_dork(dorks):
+
+        results = await scan_dork(dorks)
+        for result in results:
             await websocket.send_text(json.dumps(result))
-            results.append(result)
-        await websocket.close()
+
     except WebSocketDisconnect:
-        print("Client disconnected")
+        print("⚠️ Client déconnecté (scan)")
+    except Exception as e:
+        print(f"❌ Erreur pendant le scan : {e}")
+        await websocket.send_text(json.dumps({
+            "error": "Erreur lors du scan. Vérifie ta clé SERPAPI."
+        }))
+    finally:
+        await websocket.close()
 
 @app.websocket("/ws/generate_dorks")
 async def websocket_generate_dorks(websocket: WebSocket):
@@ -38,6 +45,12 @@ async def websocket_generate_dorks(websocket: WebSocket):
         prompt = await websocket.receive_text()
         dorks = await generate_dorks_openai(prompt)
         await websocket.send_text(json.dumps(dorks))
-        await websocket.close()
     except WebSocketDisconnect:
-        print("Client disconnected")
+        print("⚠️ Client déconnecté (generate)")
+    except Exception as e:
+        print(f"❌ Erreur génération : {e}")
+        await websocket.send_text(json.dumps({
+            "error": "Erreur pendant la génération des dorks."
+        }))
+    finally:
+        await websocket.close()
