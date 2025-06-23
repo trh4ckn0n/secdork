@@ -5,7 +5,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from utils.dorker import dorker
+from utils.dorker import scan_dork
 from utils.ai_gen import generate_dorks_openai
 
 app = FastAPI()
