@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Trhacknon Dork Scanner</title>
+  <style>
+    body {
+      background-color: #121212;
+      color: #00ffcc;
+      font-family: monospace;
+    }
+    textarea, input, button {
+      background: #222;
+      color: #00ffcc;
+      border: 1px solid #00ffcc;
+      margin: 5px;
+      padding: 5px;
+    }
+    #results {
+      white-space: pre-wrap;
+      border: 1px dashed #00ffcc;
+      padding: 10px;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>🕵️‍♂️ trhacknon Dork Scanner</h1>
+  <h3>➤ Générer des Dorks via GPT-4 :</h3>
+  <input id="prompt" placeholder="Exemple : recherche dork php vulnerable admin" size="60">
+  <button onclick="generate()">🎯 Générer</button>
+
+  <h3>➤ Scanner des Dorks :</h3>
+  <textarea id="dorks" rows="10" cols="60" placeholder="Un dork par ligne..."></textarea><br>
+  <button onclick="scan()">🚀 Scanner</button>
+
+  <div id="results"></div>
+
+  <script>
+    async function generate() {
+      const ws = new WebSocket("wss://" + location.host + "/ws/generate_dorks");
+      ws.onopen = () => ws.send(document.getElementById("prompt").value);
+      ws.onmessage = (msg) => {
+        let dorks = JSON.parse(msg.data);
+        document.getElementById("dorks").value = dorks.join("\n");
+      };
+    }
+
+    async function scan() {
+      const ws = new WebSocket("wss://" + location.host + "/ws/scan");
+      ws.onopen = () => {
+        let lines = document.getElementById("dorks").value.split("\n").filter(l => l.trim());
+        ws.send(JSON.stringify({ dorks: lines }));
+      };
+      ws.onmessage = (msg) => {
+        let res = JSON.parse(msg.data);
+        document.getElementById("results").innerText += `🔍 ${res.dork} | ${res.status} | ${res.risk}\n`;
+      };
+    }
+  </script>
+</body>
+</html>
