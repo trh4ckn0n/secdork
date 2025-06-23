@@ -5,7 +5,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from utils.dorker import scan_dork
+from utils.dorker import dorker
 from utils.ai_gen import generate_dorks_openai
 
 app = FastAPI()
@@ -24,16 +24,25 @@ async def websocket_scan(websocket: WebSocket):
         obj = json.loads(data)
         dorks = obj.get("dorks", [])
 
-        results = await scan_dork(dorks)
-        for result in results:
-            await websocket.send_text(json.dumps(result))
+        if not dorks:
+            await websocket.send_text(json.dumps({"error": "Aucun dork fourni"}))
+            return
+
+        results = await dorker(dorks)
+
+        # Envoie un message par dork avec ses résultats
+        for dork, links in results.items():
+            await websocket.send_text(json.dumps({
+                "dork": dork,
+                "results": links
+            }))
 
     except WebSocketDisconnect:
         print("⚠️ Client déconnecté (scan)")
     except Exception as e:
         print(f"❌ Erreur pendant le scan : {e}")
         await websocket.send_text(json.dumps({
-            "error": "Erreur lors du scan. Vérifie ta clé SERPAPI."
+            "error": "Erreur lors du scan. Vérifie les dorks ou la connexion réseau."
         }))
     finally:
         await websocket.close()
@@ -44,7 +53,14 @@ async def websocket_generate_dorks(websocket: WebSocket):
     try:
         prompt = await websocket.receive_text()
         dorks = await generate_dorks_openai(prompt)
-        await websocket.send_text(json.dumps(dorks))
+
+        if not dorks:
+            await websocket.send_text(json.dumps({"error": "Aucun dork généré"}))
+        else:
+            await websocket.send_text(json.dumps({
+                "generated": dorks
+            }))
+
     except WebSocketDisconnect:
         print("⚠️ Client déconnecté (generate)")
     except Exception as e:
