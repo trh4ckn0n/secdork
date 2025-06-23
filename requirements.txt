@@ -2,4 +2,4 @@ fastapi
 uvicorn[standard]
 jinja2
 httpx
-openai==0.28
+openai
