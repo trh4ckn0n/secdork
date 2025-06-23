@@ -7,8 +7,9 @@ def scan_dork_google(dork: str, api_key: str):
         search = GoogleSearch({
             "q": dork,
             "api_key": api_key,
-            "num": 10,  # max 100 résultats
-            "hl": "fr"
+            "num": 10,  # nombre max de résultats (jusqu'à 100)
+            "hl": "fr",  # langue française
+            "google_domain": "google.com",
         })
         results = search.get_dict()
         links = []
@@ -34,12 +35,8 @@ def scan_dork_google(dork: str, api_key: str):
 async def scan_dork(dorks):
     api_key = os.getenv("SERPAPI_KEY")
     if not api_key:
-        raise ValueError("La variable d'environnement SERPAPI_KEY est manquante.")
-    
+        raise ValueError("❌ La variable d'environnement SERPAPI_KEY est manquante.")
+
     loop = asyncio.get_event_loop()
-    tasks = []
-    for dork in dorks:
-        task = loop.run_in_executor(None, scan_dork_google, dork, api_key)
-        tasks.append(task)
-    results = await asyncio.gather(*tasks)
-    return results
+    tasks = [loop.run_in_executor(None, scan_dork_google, dork, api_key) for dork in dorks]
+    return await asyncio.gather(*tasks)
