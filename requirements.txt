@@ -3,3 +3,5 @@ uvicorn[standard]
 jinja2
 httpx
 openai
+python-dotenv
+google-search-results
