@@ -4,8 +4,10 @@ services:
     env: python
     plan: free
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "uvicorn main:app --host 0.0.0.0 --port 10000"
+    startCommand: "uvicorn main:app --host 0.0.0.0 --port 10000 --workers 2"
     envVars:
       - key: OPENAI_API_KEY
-        value: sk-xxxxxx # ou configure-la dans l'interface Render
+        sync: false  # configure cette clé dans l'interface Render
+      - key: SERPAPI_KEY
+        sync: false  # configure aussi cette clé dans Render
     autoDeploy: true
