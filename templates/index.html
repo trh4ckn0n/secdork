@@ -8,24 +8,37 @@
       background-color: #121212;
       color: #00ffcc;
       font-family: monospace;
+      padding: 20px;
     }
     textarea, input, button {
       background: #222;
       color: #00ffcc;
       border: 1px solid #00ffcc;
-      margin: 5px;
-      padding: 5px;
+      margin: 5px 0;
+      padding: 8px;
+      font-family: monospace;
+    }
+    button {
+      cursor: pointer;
+      transition: 0.3s;
+    }
+    button:hover {
+      background-color: #00ffcc;
+      color: #121212;
     }
     #results {
       white-space: pre-wrap;
       border: 1px dashed #00ffcc;
       padding: 10px;
       margin-top: 10px;
+      max-height: 400px;
+      overflow-y: auto;
     }
   </style>
 </head>
 <body>
   <h1>🕵️‍♂️ trhacknon Dork Scanner</h1>
+
   <h3>➤ Générer des Dorks via GPT-4 :</h3>
   <input id="prompt" placeholder="Exemple : recherche dork php vulnerable admin" size="60">
   <button onclick="generate()">🎯 Générer</button>
@@ -34,27 +47,50 @@
   <textarea id="dorks" rows="10" cols="60" placeholder="Un dork par ligne..."></textarea><br>
   <button onclick="scan()">🚀 Scanner</button>
 
-  <div id="results"></div>
+  <div id="results">🔰 Résultats du scan :</div>
 
   <script>
+    function printLine(text) {
+      const results = document.getElementById("results");
+      results.innerText += "\n" + text;
+      results.scrollTop = results.scrollHeight;
+    }
+
     async function generate() {
+      const prompt = document.getElementById("prompt").value.trim();
+      if (!prompt) return alert("Merci d'écrire un prompt.");
+      
       const ws = new WebSocket("wss://" + location.host + "/ws/generate_dorks");
-      ws.onopen = () => ws.send(document.getElementById("prompt").value);
+      ws.onopen = () => ws.send(prompt);
       ws.onmessage = (msg) => {
-        let dorks = JSON.parse(msg.data);
-        document.getElementById("dorks").value = dorks.join("\n");
+        const data = JSON.parse(msg.data);
+        if (data.error) {
+          alert("Erreur génération : " + data.error);
+          return;
+        }
+        document.getElementById("dorks").value = data.generated.join("\n");
       };
     }
 
     async function scan() {
+      document.getElementById("results").innerText = "🔰 Résultats du scan :";
+
+      const lines = document.getElementById("dorks").value.split("\n").map(l => l.trim()).filter(Boolean);
+      if (!lines.length) return alert("Merci d’entrer au moins un dork.");
+
       const ws = new WebSocket("wss://" + location.host + "/ws/scan");
-      ws.onopen = () => {
-        let lines = document.getElementById("dorks").value.split("\n").filter(l => l.trim());
-        ws.send(JSON.stringify({ dorks: lines }));
-      };
+      ws.onopen = () => ws.send(JSON.stringify({ dorks: lines }));
+
       ws.onmessage = (msg) => {
-        let res = JSON.parse(msg.data);
-        document.getElementById("results").innerText += `🔍 ${res.dork} | ${res.status} | ${res.risk}\n`;
+        const res = JSON.parse(msg.data);
+        if (res.error) {
+          printLine("❌ Erreur : " + res.error);
+        } else {
+          const dork = res.dork;
+          const links = res.results || [];
+          printLine(`🔍 ${dork} → ${links.length} résultats`);
+          links.forEach(link => printLine("    ➤ " + link));
+        }
       };
     }
   </script>
